@@ -12,7 +12,7 @@ const app = express();
 app.use(bodyParser.json());
 
 // Set up Sequelize to connect to PostgreSQL database
-const sequelize = new Sequelize('voosh_db', 'postgres', '', {
+const sequelize = new Sequelize('voosh_db', 'postgres', 'postgres', {
   host: 'localhost',
   dialect: 'postgres',
 });
