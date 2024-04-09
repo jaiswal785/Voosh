@@ -9,6 +9,9 @@ const swaggerUi = require('swagger-ui-express');
 const aws = require('aws-sdk');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
+const passport = require('passport');
+const session = require('express-session');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
 require('dotenv').config()
 
@@ -17,6 +20,75 @@ const app = express();
 
 // Use middleware to parse JSON bodies
 app.use(bodyParser.json());
+
+app.use(session({
+  secret: 'your-secret-key',
+  resave: false,
+  saveUninitialized: false
+}));
+
+passport.serializeUser(function(user, done) {
+  done(null, user.email);
+});
+
+passport.deserializeUser(async function(email, done) {
+  console.log(email);
+  const user = await User.findOne({ where: { email: email } });
+  console.log(user);
+  done(null, user);
+});
+
+
+passport.use(new GoogleStrategy({
+    clientID: "1098039870037-dlu74vafja9ai5rh1rt4pv71jmmb4epk.apps.googleusercontent.com",
+    clientSecret: "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",
+    callbackURL: "/auth/google/callback"
+  },
+  async function(accessToken, refreshToken, profile, done) {
+    // This function is called when a user successfully signs in with Google.
+    // You can retrieve user data from the `profile` object and perform actions like saving the user to the database.
+    const googleId = profile.id;
+    const googleEmail = profile.emails[0].value;
+    console.log(googleId, googleEmail);
+    try {
+      const user = await User.findOne({where: { "email": googleEmail }});
+      if (!user) {
+          const newUser = await User.create({
+            email: googleEmail,
+            name: profile.displayName,
+            is_admin: false,
+            is_public: true
+          });
+          console.log(newUser);
+          return done(null, newUser);
+      }
+      return done(null, user);
+    } catch (e) {
+      return done(e, false);
+    }
+    return done(null, profile);
+  }
+));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+
+// Define route for Google sign-in
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+// Define route for Google sign-in callback
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    console.log(req.user);
+    const token = jwt.sign({ userId: req.user.id }, 'secret', { expiresIn: '1h' });
+    res.status(200).json({ token });
+    //res.redirect('/');
+  });
 
 const options = {
   definition: {
@@ -48,7 +120,7 @@ const User = sequelize.define('user', {
   },
   password: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
   name: {
     type: DataTypes.STRING,
@@ -123,6 +195,11 @@ const upload = multer({
       cb(null, Date.now().toString() + '-' + file.originalname);
     },
   }),
+});
+
+app.get('/', async (req, res) => {
+  
+  res.status(200).json({ description: "Welcome to Homepage" });
 });
 
 /**
